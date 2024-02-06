@@ -9,37 +9,26 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Autowired;
 import searchengine.model.Page;
-import searchengine.model.SiteModel;
 import searchengine.repositories.PageRepository;
-import searchengine.repositories.SitesRepository;
 
 import java.io.IOException;
-import java.net.SocketTimeoutException;
-import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ForkJoinTask;
 import java.util.concurrent.RecursiveAction;
 
 //Класс из раздела мноргопоточность
 //Рассмотреть варианты внедрения
 public class ParseLinksTask extends RecursiveAction {
-    @Autowired
-    PageRepository pageRepository;
     private final String url;
 
-    public ParseLinksTask(PageRepository pageRepository, String url) {
-        this.pageRepository = pageRepository;
+    public ParseLinksTask(String url, List<Page> pagesList) {
         this.url = url;
+        this.pagesList = pagesList;
+
     }
 
-    public ParseLinksTask(String url) {
-        this.url = url;
-    }
-
-    //    public ParseLinksTask(final SiteModel siteModel) {
-//        this.siteModel = siteModel;
-//        this.url = siteModel.getUrl();
-//    }
     public static volatile HashSet<String> allLinks = new HashSet<>();
 
     @Getter
@@ -48,8 +37,9 @@ public class ParseLinksTask extends RecursiveAction {
 
     private static  Connection.Response response;
     @Getter
-    private static volatile List<Page> pagesList = new ArrayList<>();
-
+    private List<Page> pagesList;
+        //TODO: надо сделать так, чтобы при запуске нового таска в потоке лист страниц создавался заного
+        // и после передаче в лист для сайта(перед записью в репозиторий)список очищался
 
     public TreeSet<String> getLinks(){
 
@@ -59,7 +49,7 @@ public class ParseLinksTask extends RecursiveAction {
         try {
             Connection connection = Jsoup.connect(url)
                     .userAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/535.21 (KHTML, like Gecko) Chrome/19.0.1042.0 Safari/535.21")
-                    .referrer("http://www.google.com")
+                   // .referrer("http://www.google.com")
                     .timeout(20000)
                     .ignoreHttpErrors(true)
                     .ignoreContentType(true);
@@ -67,7 +57,7 @@ public class ParseLinksTask extends RecursiveAction {
             response = connection.execute();
 
             document = connection.get();
-            String content = document.body().html();
+            StringBuilder content = new StringBuilder(document.body().html());
 
 
             addPageToRep(url, content, getHttpStatus());
@@ -87,9 +77,9 @@ public class ParseLinksTask extends RecursiveAction {
             String link = e.attr("abs:href");
 
             if(
-                    link.endsWith("/")
-                    && !allLinks.contains(link)
-                    && link.startsWith(url) )
+            //link.endsWith("/") &&
+                            !allLinks.contains(link) &&
+                            link.startsWith(url) )
             {
                 treeLinks.add(link);
             }
@@ -102,7 +92,7 @@ public class ParseLinksTask extends RecursiveAction {
         return statusCode;
     }
 
-    private void addPageToRep(String url, String content, int httpStatus){
+    private void addPageToRep(String url, StringBuilder content, int httpStatus){
 //        Page page = new Page(siteModel);
 //        page.setPath(siteModel.getUrl());
 //        page.setCode(1);
@@ -112,19 +102,21 @@ public class ParseLinksTask extends RecursiveAction {
 
 
            // page.setContent("some content");
-            if(pagesList.stream().anyMatch(page -> cutPath(url).equals(page.getPath()))){
+          if(pagesList.stream().anyMatch(page -> cutPath(url).equals(page.getPath()))){
 
             } else
             {
 
-                if (content == null) {
-                    content = "";
-                }
+//                if (content == null) {
+//                    content = "";
+//                }
                 Page page = new Page();
-                page.setContent(content);
+                page.setContent(content.toString());
                 page.setPath(cutPath(url));
                 page.setCode(getHttpStatus());
+
                 pagesList.add(page);
+
                 //   pageRepository.save(page);
 
             }
@@ -148,7 +140,7 @@ public class ParseLinksTask extends RecursiveAction {
 
                 linksHashMap.put(innerLink, url);
                 //invokeAll(new ParseLinksTask(innerLink));
-                ParseLinksTask parseLinksTask = new ParseLinksTask(innerLink);
+                ParseLinksTask parseLinksTask = new ParseLinksTask(innerLink, pagesList);
                 taskList.add(parseLinksTask);
             }
             ForkJoinTask.invokeAll(taskList);
@@ -158,15 +150,23 @@ public class ParseLinksTask extends RecursiveAction {
     public String cutPath(String path){
         int index = 0;
         for(int i = 0; i<3; i++){
-            int begIndex = path.indexOf("/", index+1);
-            index = begIndex;
+            int begIndexIndex = path.indexOf("/", index+1);
+            index = begIndexIndex;
         }
+        if(!path.endsWith("/")){
+            path+="/";
+        }
+        if(index < 0){
+            index = path.length() - 1;
+        }
+
         String newPath = path.substring(index);
+
 
         return newPath;
     }
 
-
-
-
+    public void erasePagesList() {
+        linksHashMap = new HashMap<>();
+    }
 }

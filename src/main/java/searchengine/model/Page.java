@@ -9,10 +9,12 @@ import javax.persistence.*;
 import javax.persistence.Index;
 
 @Entity
-@Table( name = "page", indexes = @Index(name = "path_index", columnList = "path", unique = true))
+@Table( name = "page")
+       // ,indexes = @Index(name = "path_index", columnList = "path", unique = true))       делает path ключем для поиска , но ссылки / не пишутся в базу
 @Getter
 @Setter
 @NoArgsConstructor
+
 public class Page {
 //    public Page(SiteModel siteModel) {
 //        this.siteModel = siteModel;
@@ -42,3 +44,4 @@ public class Page {
 
 
 }
+///:~

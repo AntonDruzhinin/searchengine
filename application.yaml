@@ -5,7 +5,8 @@ spring:
   datasource:
     username: root
     password: Password1234
-    url: jdbc:mysql://localhost:3306/search_engine?useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://localhost:3306/search_engine?charset=utf8mb4&useSSL=false&requireSSL=false&allowPublicKeyRetrieval=true
+
   jpa:
     properties:
       hibernate:
@@ -23,7 +24,8 @@ indexing-settings:
 #      name: Skillbox
     - url: https://kixxlube.ru/
       name: kixx
-#    - url: https://britva11.ru
-#      name: Britva11
-
+    - url: https://dombulgakova.ru
+      name: Dom Bulgakova
+    - url: https://lukoil.ru/
+      name: Lukoil
 
