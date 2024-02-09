@@ -22,10 +22,11 @@ import java.util.concurrent.RecursiveAction;
 //Рассмотреть варианты внедрения
 public class ParseLinksTask extends RecursiveAction {
     private final String url;
+    private final ListPages listPages;
 
-    public ParseLinksTask(String url, List<Page> pagesList) {
+    public ParseLinksTask(String url, ListPages listPages) {
         this.url = url;
-        this.pagesList = pagesList;
+        this.listPages = listPages;
 
     }
 
@@ -36,8 +37,7 @@ public class ParseLinksTask extends RecursiveAction {
     @Getter
 
     private static  Connection.Response response;
-    @Getter
-    private List<Page> pagesList;
+
         //TODO: надо сделать так, чтобы при запуске нового таска в потоке лист страниц создавался заного
         // и после передаче в лист для сайта(перед записью в репозиторий)список очищался
 
@@ -46,18 +46,20 @@ public class ParseLinksTask extends RecursiveAction {
         TreeSet<String> treeLinks = new TreeSet<>();
         Document document = null;
         Elements elements = null;
+
         try {
+            String userAgent;
             Connection connection = Jsoup.connect(url)
                     .userAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/535.21 (KHTML, like Gecko) Chrome/19.0.1042.0 Safari/535.21")
                    // .referrer("http://www.google.com")
-                    .timeout(20000)
+                    .timeout(7000)
                     .ignoreHttpErrors(true)
                     .ignoreContentType(true);
             Thread.sleep(250);
             response = connection.execute();
 
             document = connection.get();
-            StringBuilder content = new StringBuilder(document.body().html());
+            StringBuilder content = new StringBuilder(document.html());
 
 
             addPageToRep(url, content, getHttpStatus());
@@ -74,12 +76,13 @@ public class ParseLinksTask extends RecursiveAction {
         }
 
         for (Element e : elements){
-            String link = e.attr("abs:href");
+            String link = e.attr("href");
 
             if(
             //link.endsWith("/") &&
                             !allLinks.contains(link) &&
-                            link.startsWith(url) )
+                            link.startsWith(url) &&
+                            !link.contains("#"))
             {
                 treeLinks.add(link);
             }
@@ -102,7 +105,7 @@ public class ParseLinksTask extends RecursiveAction {
 
 
            // page.setContent("some content");
-          if(pagesList.stream().anyMatch(page -> cutPath(url).equals(page.getPath()))){
+          if(listPages.getPagesList().stream().anyMatch(page -> cutPath(url).equals(page.getPath()))){
 
             } else
             {
@@ -115,7 +118,7 @@ public class ParseLinksTask extends RecursiveAction {
                 page.setPath(cutPath(url));
                 page.setCode(getHttpStatus());
 
-                pagesList.add(page);
+                listPages.addPage(page);
 
                 //   pageRepository.save(page);
 
@@ -140,7 +143,7 @@ public class ParseLinksTask extends RecursiveAction {
 
                 linksHashMap.put(innerLink, url);
                 //invokeAll(new ParseLinksTask(innerLink));
-                ParseLinksTask parseLinksTask = new ParseLinksTask(innerLink, pagesList);
+                ParseLinksTask parseLinksTask = new ParseLinksTask(innerLink, listPages);
                 taskList.add(parseLinksTask);
             }
             ForkJoinTask.invokeAll(taskList);

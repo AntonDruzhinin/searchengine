@@ -32,12 +32,22 @@ public class ApiController {
     @GetMapping("/startindexing")
     public ResponseEntity<IndexingResponse> startIndexing(){
         HashMap<String, String> result = new HashMap<>();
-        Boolean flag = false;
+        boolean flag = false;
         if (flag){
             return ResponseEntity.ok(indexService.getFalseResult());
 
         }
         result.put("result", "true");
         return ResponseEntity.ok(indexService.getIndexingResult());
+    }
+
+    @GetMapping("/stopindexing")
+    public ResponseEntity<IndexingResponse> stopIndexing(){
+//        boolean flag = false;
+//        if(flag){
+//            return ResponseEntity.ok(indexService.getStopIndexingResponse());
+//
+//        }
+        return ResponseEntity.ok(indexService.getStopIndexingResponse());
     }
 }

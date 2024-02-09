@@ -6,10 +6,7 @@ import org.springframework.scheduling.config.Task;
 import org.springframework.stereotype.Service;
 import searchengine.config.Site;
 import searchengine.config.SiteList;
-import searchengine.dto.statistics.ErrorResponse;
-import searchengine.dto.statistics.IndexingResponse;
-import searchengine.dto.statistics.ParseLinksTask;
-import searchengine.dto.statistics.ParseSite;
+import searchengine.dto.statistics.*;
 import searchengine.model.*;
 import searchengine.repositories.PageRepository;
 import searchengine.repositories.SitesRepository;
@@ -18,9 +15,7 @@ import searchengine.services.IndexService;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.ForkJoinTask;
+import java.util.concurrent.*;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +27,10 @@ public class IndexServiceImpl implements IndexService {
 
 
     private final SiteList siteList;
+    private final ExecutorService service = Executors.newCachedThreadPool();
+    private final ForkJoinPool forkJoinPool = new ForkJoinPool();
+
+
 
 
 
@@ -39,21 +38,22 @@ public class IndexServiceImpl implements IndexService {
 
     public void startIndexing() throws Exception {
 
-
         List<searchengine.config.Site> links = siteList.getSites();
         for(Site link : links){
            // checkSite(link);
             addSite(link);
         }
-
         getPages();
-
-
         IndexingResponse response = new IndexingResponse();
         response.setResult(true);
         response.setResponse("Чёт получается" +
                 "");
 
+    }
+
+    public void stopIndexing(){
+        service.shutdown();
+        forkJoinPool.shutdown();
     }
 
     private void checkSite(Site link){
@@ -82,9 +82,9 @@ public class IndexServiceImpl implements IndexService {
 
     private void getPages() throws Exception {
         Iterable<SiteModel> siteModels = sitesRepository.findAll();
-        ForkJoinPool forkJoinPool = new ForkJoinPool(4);
+       // ForkJoinPool forkJoinPool = new ForkJoinPool(4);
         for (SiteModel siteModel : siteModels) {
-            forkJoinPool.submit(new Thread(() -> {
+            service.submit(new Thread(() -> {
                 List <Page> pagesToDB = new CopyOnWriteArrayList<>();
                 try {
                     pagesToDB.addAll(getPagesList(siteModel));
@@ -120,15 +120,16 @@ public class IndexServiceImpl implements IndexService {
     }
 
     public synchronized List<Page> getPagesList(SiteModel siteModel) throws IOException{
-        List<Page> pageslist = new ArrayList<>();
-        ParseLinksTask parseLinksTask = new ParseLinksTask(siteModel.getUrl(), pageslist);
-        ForkJoinPool forkJoinPool = new ForkJoinPool(1);
+
+        ListPages listPages = new ListPages(siteModel);
+        ParseLinksTask parseLinksTask = new ParseLinksTask(siteModel.getUrl(), listPages);
+       // ForkJoinPool forkJoinPool = new ForkJoinPool(4);
         forkJoinPool.invoke(parseLinksTask);
         siteModel.setStatus(Status.INDEXING);
         siteModel.setStatusTime(LocalDateTime.now());
 
-        List<Page> pages = parseLinksTask.getPagesList();
-        parseLinksTask.erasePagesList();
+        List<Page> pages = listPages.getPagesList();
+
        // siteModel.setPages(pages);
 //        sitesRepository.save(siteModel);
 //        pageRepository.saveAll(pages);
@@ -166,4 +167,34 @@ public class IndexServiceImpl implements IndexService {
 
         return indexingResponse;
     }
+
+    @Override
+    public IndexingResponse getStopIndexingResponse() {
+        IndexingResponse response = new IndexingResponse();
+        Iterable<SiteModel> siteModelList = sitesRepository.findAll();
+        boolean isIndexing = false;
+        for (SiteModel siteModel : siteModelList){
+            if(siteModel.getStatus().equals(Status.INDEXING)){
+               isIndexing = true;
+               siteModel.setLastError("Индексация остановлена пользователем");
+               siteModel.setStatus(Status.FAILED);
+            }
+        }
+        if(!isIndexing){
+            response.setError("Процесс индексации не запущен");
+            response.setResult(false);
+            return response;}
+
+        try {
+            stopIndexing();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        response.setResult(true);
+        response.setError(service.isShutdown() + "  еще рабоает");
+        System.out.println(Thread.activeCount() + " потоков сейчас работает");
+        return response;
+    }
+
+
 }
